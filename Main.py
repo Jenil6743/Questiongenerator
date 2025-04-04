@@ -15,6 +15,7 @@ import pytesseract
 from pdf2image import convert_from_bytes
 from PIL import Image
 import io
+import requests  # for token estimation
 
 # Instead of using dotenv, use Streamlit secrets
 def get_api_key(key_name):
@@ -33,6 +34,13 @@ EDUCATIONAL_BOARDS = ["CBSE", "ICSE", "State Board"]
 CLASSES = list(range(1, 13))
 SUBJECTS = ["Mathematics", "Science", "Social Studies", "English", "Hindi", "Physics", "Chemistry", "Biology", "Computer Science", "Other"]
 QUESTION_TYPES = ["multiple-choice", "short-answer", "long-answer", "true-false", "fill-in-the-blanks", "match-the-following"]
+
+# Function to estimate token count (approximate)
+def estimate_tokens(text):
+    """Estimate token count for a text string - rough estimate based on words"""
+    # Simple estimation: ~1.3 tokens per word for English
+    words = text.split()
+    return int(len(words) * 1.3)
 
 def is_pdf_scanned(pdf_bytes):
     """Check if a PDF is likely scanned/image-based or text-based"""
@@ -409,6 +417,45 @@ def generate_questions(inputs, max_retries=2):
     )
     prompt = ChatPromptTemplate.from_template(prompt_template)
     
+    # Instead of using the entire content, use vector retrieval to get most relevant parts
+    # This helps avoid token limit issues
+    if st.session_state.vectors:
+        # Create a query to search the vector database
+        search_query = f"{board} Class {class_level} {subject} {question_type} questions {complexity_level} complexity"
+        
+        # Retrieve relevant chunks
+        with st.spinner('Retrieving relevant content from document...'):
+            # Start with a reasonable number of chunks
+            k_chunks = 5
+            relevant_docs = st.session_state.vectors.similarity_search(search_query, k=k_chunks)
+            relevant_content = "\n\n".join([doc.page_content for doc in relevant_docs])
+            
+            # Estimate token count - aim for less than 2000 tokens for content
+            estimated_tokens = estimate_tokens(relevant_content)
+            
+            # If too many tokens, reduce the number of chunks
+            while estimated_tokens > 2000 and k_chunks > 1:
+                k_chunks -= 1
+                relevant_docs = st.session_state.vectors.similarity_search(search_query, k=k_chunks)
+                relevant_content = "\n\n".join([doc.page_content for doc in relevant_docs])
+                estimated_tokens = estimate_tokens(relevant_content)
+                
+            # Log the tokens for debugging
+            st.session_state.content_tokens = estimated_tokens
+            
+            # If still too large, truncate
+            if estimated_tokens > 2000:
+                words = relevant_content.split()
+                relevant_content = " ".join(words[:1500])  # Approximately 2000 tokens
+                
+            # Use the retrieved content instead of the entire document
+            content = relevant_content
+    else:
+        # If no vector DB, use a truncated version of the content
+        words = content.split()
+        if len(words) > 1500:  # Roughly 2000 tokens
+            content = " ".join(words[:1500])
+    
     # Try generating with retries for reliability
     for attempt in range(max_retries + 1):
         try:
@@ -423,6 +470,21 @@ def generate_questions(inputs, max_retries=2):
                     complexity_level=complexity_level,
                     num_questions=num_questions
                 )
+                
+                # Estimate total tokens
+                prompt_tokens = estimate_tokens(formatted_prompt)
+                if prompt_tokens > 5000:
+                    st.warning(f"Prompt too large (~{prompt_tokens} tokens). Reducing content size...")
+                    words = content.split()
+                    reduced_words = int(len(words) * (4000 / prompt_tokens))
+                    content = " ".join(words[:reduced_words])
+                    
+                    # Re-format with reduced content
+                    formatted_prompt = prompt.format(
+                        context=content,
+                        complexity_level=complexity_level,
+                        num_questions=num_questions
+                    )
                 
                 # Generate with a timeout to prevent hanging
                 start_time = time.time()
@@ -475,9 +537,34 @@ def generate_questions(inputs, max_retries=2):
             
         except Exception as e:
             st.error(f"Error during generation (attempt {attempt+1}): {e}")
+            
+            # Check if it's a token limit error
+            error_str = str(e)
+            if "413" in error_str or "token" in error_str.lower() or "too large" in error_str.lower():
+                # Reduce content size by half and try again
+                words = content.split()
+                content = " ".join(words[:len(words)//2])
+                st.warning("Request was too large. Reducing content size and trying again...")
+            
             if attempt == max_retries:
-                st.error("Maximum retries reached. Please try again.")
-                return "Failed to generate questions. Please try again."
+                # Generate with much less content as a fallback
+                fallback_content = subject + " " + board + " curriculum highlights"
+                st.warning("Using minimal content as fallback...")
+                
+                try:
+                    fallback_prompt = prompt.format(
+                        context=fallback_content,
+                        complexity_level=complexity_level,
+                        num_questions=num_questions
+                    )
+                    response = llm.invoke(fallback_prompt)
+                    fallback_answer = post_process_output(response.content)
+                    
+                    st.session_state.generated_questions = fallback_answer
+                    return fallback_answer
+                except:
+                    st.error("Maximum retries reached. Please try again with less content.")
+                    return "Failed to generate questions. Please try again with a smaller document or fewer questions."
     
     return "Failed to generate questions after multiple attempts."
 
@@ -495,15 +582,61 @@ def generate_answers(questions, board, class_level, subject, question_type):
     # Get specific prompt for answers based on question type
     answer_prompt = get_answer_prompt(question_type, board, class_level, subject)
     
-    formatted_prompt = answer_prompt.format(questions=questions)
-    
-    with st.spinner(f'AI is generating answers for {question_type} questions...'):
-        start_time = time.time()
-        response = llm.invoke(formatted_prompt)
-        generation_time = time.time() - start_time
-        st.success(f"Generated answers in {generation_time:.1f} seconds!")
-    
-    cleaned_answers = post_process_output(response.content)
+    # Check token count before sending
+    total_questions_tokens = estimate_tokens(questions)
+    if total_questions_tokens > 3000:
+        # Too many questions for one request, so split them
+        st.warning("Many questions detected. Generating answers in batches...")
+        
+        # Find question boundaries to split properly
+        question_parts = re.split(r'(\d+\.\s)', questions)
+        all_questions = []
+        current_question = ""
+        
+        for part in question_parts:
+            if re.match(r'\d+\.\s', part):
+                if current_question:
+                    all_questions.append(current_question)
+                current_question = part
+            else:
+                current_question += part
+        
+        if current_question:
+            all_questions.append(current_question)
+        
+        # Process questions in smaller batches
+        batch_size = max(1, len(all_questions) // 2)  # Split into at least 2 batches
+        batches = [all_questions[i:i+batch_size] for i in range(0, len(all_questions), batch_size)]
+        
+        all_answers = []
+        for i, batch in enumerate(batches):
+            batch_text = "".join(batch)
+            st.info(f"Generating answers for batch {i+1} of {len(batches)}...")
+            
+            formatted_prompt = answer_prompt.format(questions=batch_text)
+            
+            try:
+                response = llm.invoke(formatted_prompt)
+                batch_answers = post_process_output(response.content)
+                all_answers.append(batch_answers)
+            except Exception as e:
+                st.error(f"Error generating answers for batch {i+1}: {e}")
+                all_answers.append(f"Error generating answers for questions {i*batch_size+1}-{min((i+1)*batch_size, len(all_questions))}")
+        
+        # Combine all answer batches
+        combined_answers = "\n\n".join(all_answers)
+        cleaned_answers = post_process_output(combined_answers)
+    else:
+        # Normal processing for smaller question sets
+        formatted_prompt = answer_prompt.format(questions=questions)
+        
+        with st.spinner(f'AI is generating answers for {question_type} questions...'):
+            start_time = time.time()
+            response = llm.invoke(formatted_prompt)
+            generation_time = time.time() - start_time
+            st.success(f"Generated answers in {generation_time:.1f} seconds!")
+        
+        cleaned_answers = post_process_output(response.content)
     
     # Store the generated answers
     st.session_state.generated_answers = cleaned_answers
@@ -559,9 +692,25 @@ def validate_questions(questions, board, class_level, subject):
     IMPORTANT FORMATTING INSTRUCTION: Output ONLY numbered questions starting with "1." - include ZERO preamble or explanations.
     Return the validated questions directly without any explanation of your validation process.
     """
-    with st.spinner('Validating questions...'):
-        response = llm.invoke(validation_prompt)
-    return response.content
+    
+    # Check token count
+    validation_tokens = estimate_tokens(validation_prompt)
+    if validation_tokens > 4000:
+        st.warning("Questions too long for full validation. Performing basic validation only.")
+        # Truncate prompt to focus on validation instructions
+        max_question_tokens = 3000
+        question_words = questions.split()
+        truncated_questions = " ".join(question_words[:int(max_question_tokens/1.3)])
+        
+        validation_prompt = validation_prompt.replace(questions, truncated_questions)
+    
+    try:
+        with st.spinner('Validating questions...'):
+            response = llm.invoke(validation_prompt)
+        return response.content
+    except Exception as e:
+        st.error(f"Validation error: {e}")
+        return questions  # Return original if validation fails
 
 def create_temp_pdf(content, board, class_level, subject, question_type, is_answer_key=False):
     """Create a temporary PDF file with the generated content"""
