@@ -124,7 +124,7 @@ def split_data_into_chunks(raw_text):
 def store_chunks_vectorDB(chunks, embedding):
     """Store text chunks in a vector database for retrieval"""
     batch_size = 100
-    vector_db = None
+    vector_db = None    
     progress_bar = st.progress(0)
     total_batches = (len(chunks) + batch_size - 1) // batch_size
     for i in range(0, len(chunks), batch_size):
@@ -735,7 +735,6 @@ def create_temp_pdf(content, board, class_level, subject, question_type, is_answ
     pdf.cell(200, 10, txt=header_text, ln=True, align="C")
     pdf.ln(5)
     
-    # Add date
     from datetime import datetime
     pdf.set_font("Arial", style="I", size=10)
     date_text = clean_text(f"Generated on: {datetime.now().strftime('%d-%m-%Y')}")
@@ -764,21 +763,18 @@ def create_temp_pdf(content, board, class_level, subject, question_type, is_answ
     with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_file:
         temp_path = temp_file.name
     
-    # Save PDF to the temporary file
     pdf.output(temp_path)
     return temp_path
 
 def main():
-    # No need to load_dotenv() anymore - we're using st.secrets
     st.set_page_config(
         page_title='CBSE Question Generator', 
         page_icon='📚',
-        layout="wide"  # Use wide layout for better display
+        layout="wide"  
     )
     
     st.title("Indian Educational Board Question Generator 📚")
     
-    # Add CSS for better styling
     st.markdown("""
     <style>
     .main-header {color: #1E88E5; font-size: 28px; font-weight: bold;}
@@ -797,7 +793,6 @@ def main():
         st.warning("API keys are missing. The application may not function correctly.")
         st.info("For administrators: Please add GROQ_API_KEY and GOOGLE_API_KEY to your Streamlit secrets.")
     
-    # Initialize session variables
     if 'vectors' not in st.session_state:
         st.session_state.vectors = None
     if 'pdf_ready' not in st.session_state:
@@ -820,7 +815,6 @@ def main():
         # Add toggle for OCR processing
         st.session_state.ocr_enabled = st.checkbox("Enable OCR for Scanned PDFs", value=True)
         
-        # File uploader with better instructions
         st.markdown('<p class="highlight">Select a PDF file containing curriculum content. Both text-based and scanned PDFs are supported.</p>', unsafe_allow_html=True)
         upload_pdf = st.file_uploader(f"Upload {board} Class {class_level} {subject} PDF", type="pdf", accept_multiple_files=False)
         
@@ -844,14 +838,12 @@ def main():
         )
         validate = st.checkbox("Validate generated questions", value=True)
         
-        # Performance options
         st.markdown("### Performance Options")
         use_faster_model = st.checkbox("Use faster model (may reduce quality slightly)", value=True)
         
         if upload_pdf:
             if st.button(f'Process {board} PDF', use_container_width=True):
                 with st.spinner('Processing PDF...'):
-                    # Get Google API key from secrets
                     google_api_key = get_api_key("GOOGLE_API_KEY")
                     if not google_api_key:
                         st.error("Google API key is missing. Please check your secrets.")
@@ -863,7 +855,6 @@ def main():
                         st.session_state.raw_text = get_pdf_text(upload_pdf)
                         
                         if st.session_state.raw_text:
-                            # Show a preview of extracted text
                             st.markdown("### Preview of Extracted Text")
                             preview_text = st.session_state.raw_text[:500] + "..." if len(st.session_state.raw_text) > 500 else st.session_state.raw_text
                             st.text_area("Extracted Text Preview", preview_text, height=100)
@@ -872,32 +863,26 @@ def main():
                             st.session_state.vectors = store_chunks_vectorDB(chunks=split_chunks, embedding=st.session_state.embedding)
                             st.success('PDF processing complete! 🎉')
                             
-                            # Show detected pages and word count
                             word_count = len(st.session_state.raw_text.split())
                             st.markdown(f"<p class='success'>Extracted {word_count} words from the PDF.</p>", unsafe_allow_html=True)
                             
-                            # Reset answers when new PDF is processed
                             if 'answers' in st.session_state:
                                 del st.session_state.answers
                             st.session_state.answers_generated = False
                         else:
                             st.error("Failed to extract text from the PDF. Please try another file.")
     
-    # Main content
     if st.session_state.vectors:
         st.subheader(f"Generate {board} Class {class_level} {subject} Questions")
         
-        # Show extracted content stats
         if hasattr(st.session_state, 'raw_text'):
             word_count = len(st.session_state.raw_text.split())
             st.markdown(f"<p class='highlight'>Working with {word_count} words of content from your PDF.</p>", unsafe_allow_html=True)
         
-        # Create a two-column layout
         col1, col2 = st.columns(2)
         
         with col1:
             if st.button(f"Generate {question_types.title()} Questions", use_container_width=True):
-                # Reset answers when new questions are generated
                 if 'answers' in st.session_state:
                     del st.session_state.answers
                 st.session_state.answers_generated = False
@@ -913,7 +898,6 @@ def main():
                     "subject": subject
                 }
                 
-                # Generate questions with improved reliability
                 st.session_state.ai_answer = generate_questions(inputs)
                 
                 if validate:
@@ -928,11 +912,9 @@ def main():
                 st.markdown(f"<div class='success'>{st.session_state.ai_answer.replace(chr(10), '<br>')}</div>", unsafe_allow_html=True)
         
         with col2:
-            # Only show the "Generate Answers" button if questions have been generated
             if 'ai_answer' in st.session_state and not st.session_state.answers_generated:
                 if st.button("Generate Answer Key", use_container_width=True):
                     with st.spinner("Generating detailed answers..."):
-                        # Get current question type from session state if available
                         current_qt = question_types
                         if st.session_state.question_settings:
                             current_qt = st.session_state.question_settings.get("type", question_types)
@@ -946,23 +928,19 @@ def main():
                         )
                         st.session_state.answers_generated = True
             
-            # Display the answers if they've been generated
             if 'answers' in st.session_state and st.session_state.answers_generated:
                 st.subheader("Answer Key")
                 st.markdown(f"<div class='success'>{st.session_state.answers.replace(chr(10), '<br>')}</div>", unsafe_allow_html=True)
     
-    # Export section for PDFs
     if "ai_answer" in st.session_state:
         st.markdown("### Export Options")
         
-        # Get current question type
         current_qt = question_types
         if st.session_state.question_settings:
             current_qt = st.session_state.question_settings.get("type", question_types)
         
         col1, col2 = st.columns(2)
         
-        # Question PDF export
         with col1:
             if st.button(f"Export {current_qt.title()} Questions to PDF", use_container_width=True):
                 import tempfile
@@ -980,7 +958,6 @@ def main():
                             is_answer_key=False
                         )
                         
-                        # Read the temporary file
                         with open(temp_pdf_path, "rb") as pdf_file:
                             pdf_data = pdf_file.read()
                         
@@ -992,7 +969,7 @@ def main():
                             data=pdf_data,
                             file_name=f"{board}Class{class_level}{subject}_{current_qt}_Questions.pdf",
                             mime="application/pdf",
-                            use_container_width=True
+                            use_container_width=True    
                         )
                         
                         st.success(f"{current_qt.title()} Questions PDF created successfully!")
@@ -1020,11 +997,9 @@ def main():
                                 is_answer_key=True
                             )
                             
-                            # Read the temporary file
                             with open(temp_pdf_path, "rb") as pdf_file:
                                 pdf_data = pdf_file.read()
                             
-                            # Remove the temporary file
                             os.unlink(temp_pdf_path)
                             
                             st.download_button(
@@ -1054,6 +1029,6 @@ def main():
         """)
         
         st.info("This tool supports OCR for scanned PDFs and handwritten content. Enable the OCR option in the sidebar if you're using scanned materials.")
-## run the app
+
 if __name__ == "__main__":
     main()
