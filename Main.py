@@ -1,33 +1,76 @@
 import streamlit as st
+
+# Add immediate debug output
+st.write("App initializing...")
+
+# Import standard libraries first
 import os
-import PyPDF2
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_community.vectorstores import FAISS
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_google_genai import GoogleGenerativeAIEmbeddings
-from langchain_groq import ChatGroq
-from fpdf import FPDF
 import re
 import random
 import time
-import concurrent.futures
-import pytesseract
-from pdf2image import convert_from_bytes
-from PIL import Image
 import io
-import requests  # for token estimation
+import concurrent.futures
+import tempfile
+from datetime import datetime
+
+# Add more debug messages
+st.write("Basic imports successful")
+
+# Import potentially problematic dependencies with error handling
+tesseract_available = False
+pdf2image_available = False
+pypdf_available = False
+
+try:
+    import PyPDF2
+    pypdf_available = True
+    st.write("PyPDF2 import successful")
+except Exception as e:
+    st.error(f"Error importing PyPDF2: {str(e)}")
+
+try:
+    import pytesseract
+    tesseract_available = True
+    st.write("Tesseract import successful")
+except Exception as e:
+    st.warning(f"Tesseract OCR not available: {str(e)}")
+
+try:
+    from pdf2image import convert_from_bytes
+    pdf2image_available = True
+    st.write("PDF2Image import successful")
+except Exception as e:
+    st.warning(f"PDF2Image not available: {str(e)}")
+
+# Import remaining libraries with error handling
+try:
+    from PIL import Image
+    from langchain.text_splitter import RecursiveCharacterTextSplitter
+    from langchain_community.vectorstores import FAISS
+    from langchain_core.prompts import ChatPromptTemplate
+    from langchain_google_genai import GoogleGenerativeAIEmbeddings
+    from langchain_groq import ChatGroq
+    from fpdf import FPDF
+    import requests
+    st.write("All remaining imports successful")
+except Exception as e:
+    st.error(f"Error importing libraries: {str(e)}")
 
 # Instead of using dotenv, use Streamlit secrets
 def get_api_key(key_name):
     """Get API key from Streamlit secrets or environment variables"""
-    # First try to get from Streamlit secrets (production)
-    if key_name in st.secrets:
-        return st.secrets[key_name]
-    # Fall back to local environment variables (development)
-    elif key_name in os.environ:
-        return os.environ[key_name]
-    else:
-        st.error(f"Missing API key: {key_name}. Please add it to your secrets.")
+    try:
+        # First try to get from Streamlit secrets (production)
+        if key_name in st.secrets:
+            return st.secrets[key_name]
+        # Fall back to local environment variables (development)
+        elif key_name in os.environ:
+            return os.environ[key_name]
+        else:
+            st.error(f"Missing API key: {key_name}. Please add it to your secrets.")
+            return None
+    except Exception as e:
+        st.error(f"Error accessing secrets or environment variables: {str(e)}")
         return None
 
 EDUCATIONAL_BOARDS = ["CBSE", "ICSE", "State Board"]
@@ -44,6 +87,10 @@ def estimate_tokens(text):
 
 def is_pdf_scanned(pdf_bytes):
     """Check if a PDF is likely scanned/image-based or text-based"""
+    if not pypdf_available:
+        st.warning("PyPDF2 not available, cannot check if PDF is scanned")
+        return True
+
     try:
         # Try to read with PyPDF2
         pdf_reader = PyPDF2.PdfReader(io.BytesIO(pdf_bytes))
@@ -54,12 +101,17 @@ def is_pdf_scanned(pdf_bytes):
         if len(text.strip()) < 100:
             return True
         return False
-    except Exception:
+    except Exception as e:
+        st.warning(f"Error checking if PDF is scanned: {str(e)}")
         # If error occurs during text extraction, assume it's a scanned PDF
         return True
 
 def extract_text_from_image(image):
     """Extract text from an image using OCR"""
+    if not tesseract_available:
+        st.warning("Tesseract OCR not available, cannot extract text from image")
+        return ""
+
     try:
         # Use pytesseract to extract text from the image
         text = pytesseract.image_to_string(image)
@@ -70,6 +122,10 @@ def extract_text_from_image(image):
 
 def process_scanned_pdf(pdf_bytes):
     """Process a scanned PDF using OCR"""
+    if not pdf2image_available:
+        st.warning("PDF2Image not available, cannot process scanned PDF")
+        return ""
+
     try:
         # Convert PDF to images
         images = convert_from_bytes(pdf_bytes)
@@ -88,6 +144,10 @@ def process_scanned_pdf(pdf_bytes):
 
 def get_pdf_text(upload_pdf):
     """Extract text from PDF - supports both text-based and scanned PDFs"""
+    if not pypdf_available:
+        st.error("PyPDF2 not available, cannot extract text from PDF")
+        return None
+
     try:
         # Cache the file content
         pdf_bytes = upload_pdf.getvalue()
@@ -720,7 +780,7 @@ def create_temp_pdf(content, board, class_level, subject, question_type, is_answ
     pdf.set_auto_page_break(auto=True, margin=15)
     pdf.add_page()
     
-    # Set font
+    # Set font    
     pdf.set_font("Arial", size=12)
     pdf.set_font("Arial", style="B", size=16)
     
@@ -769,12 +829,19 @@ def create_temp_pdf(content, board, class_level, subject, question_type, is_answ
     return temp_path
 
 def main():
-    # No need to load_dotenv() anymore - we're using st.secrets
-    st.set_page_config(
-        page_title='CBSE Question Generator', 
-        page_icon='📚',
-        layout="wide"  # Use wide layout for better display
-    )
+    # Debug message before creating page config
+    st.write("About to set page config...")
+    
+    try:
+        # Set up the page configuration
+        st.set_page_config(
+            page_title='CBSE Question Generator', 
+            page_icon='📚',
+            layout="wide"  # Use wide layout for better display
+        )
+        st.write("Page config set successfully")
+    except Exception as e:
+        st.error(f"Error setting page config: {e}")
     
     st.title("Indian Educational Board Question Generator 📚")
     
@@ -789,13 +856,22 @@ def main():
     </style>
     """, unsafe_allow_html=True)
     
+    # Debug API keys
+    st.write("Checking API keys...")
+    
     # Verify API keys are available
     groq_api_key = get_api_key("GROQ_API_KEY")
     google_api_key = get_api_key("GOOGLE_API_KEY")
     
-    if not groq_api_key or not google_api_key:
-        st.warning("API keys are missing. The application may not function correctly.")
-        st.info("For administrators: Please add GROQ_API_KEY and GOOGLE_API_KEY to your Streamlit secrets.")
+    if not groq_api_key:
+        st.warning("GROQ API key is missing. The application may not function correctly.")
+    else:
+        st.write("GROQ API key found")
+        
+    if not google_api_key:
+        st.warning("Google API key is missing. The application may not function correctly.")
+    else:
+        st.write("Google API key found")
     
     # Initialize session variables
     if 'vectors' not in st.session_state:
@@ -807,7 +883,7 @@ def main():
     if 'question_settings' not in st.session_state:
         st.session_state.question_settings = None
     if 'ocr_enabled' not in st.session_state:
-        st.session_state.ocr_enabled = True
+        st.session_state.ocr_enabled = tesseract_available
     
     # Sidebar
     with st.sidebar:
@@ -817,8 +893,12 @@ def main():
         class_level = st.selectbox("Select Class:", CLASSES, index=9)
         subject = st.selectbox("Select Subject:", SUBJECTS)
         
-        # Add toggle for OCR processing
-        st.session_state.ocr_enabled = st.checkbox("Enable OCR for Scanned PDFs", value=True)
+        # Add toggle for OCR processing (only if available)
+        if tesseract_available:
+            st.session_state.ocr_enabled = st.checkbox("Enable OCR for Scanned PDFs", value=True)
+        else:
+            st.warning("OCR not available. Scanned PDFs may not work properly.")
+            st.session_state.ocr_enabled = False
         
         # File uploader with better instructions
         st.markdown('<p class="highlight">Select a PDF file containing curriculum content. Both text-based and scanned PDFs are supported.</p>', unsafe_allow_html=True)
@@ -856,34 +936,41 @@ def main():
                     if not google_api_key:
                         st.error("Google API key is missing. Please check your secrets.")
                     else:
-                        st.session_state.embedding = GoogleGenerativeAIEmbeddings(
-                            api_key=google_api_key,
-                            model="models/embedding-001"
-                        )
-                        st.session_state.raw_text = get_pdf_text(upload_pdf)
-                        
-                        if st.session_state.raw_text:
-                            # Show a preview of extracted text
-                            st.markdown("### Preview of Extracted Text")
-                            preview_text = st.session_state.raw_text[:500] + "..." if len(st.session_state.raw_text) > 500 else st.session_state.raw_text
-                            st.text_area("Extracted Text Preview", preview_text, height=100)
+                        try:
+                            st.session_state.embedding = GoogleGenerativeAIEmbeddings(
+                                api_key=google_api_key,
+                                model="models/embedding-001"
+                            )
+                            st.write("Embeddings model initialized")
                             
-                            split_chunks = split_data_into_chunks(st.session_state.raw_text)
-                            st.session_state.vectors = store_chunks_vectorDB(chunks=split_chunks, embedding=st.session_state.embedding)
-                            st.success('PDF processing complete! 🎉')
+                            st.session_state.raw_text = get_pdf_text(upload_pdf)
                             
-                            # Show detected pages and word count
-                            word_count = len(st.session_state.raw_text.split())
-                            st.markdown(f"<p class='success'>Extracted {word_count} words from the PDF.</p>", unsafe_allow_html=True)
-                            
-                            # Reset answers when new PDF is processed
-                            if 'answers' in st.session_state:
-                                del st.session_state.answers
-                            st.session_state.answers_generated = False
-                        else:
-                            st.error("Failed to extract text from the PDF. Please try another file.")
+                            if st.session_state.raw_text:
+                                # Show a preview of extracted text
+                                st.markdown("### Preview of Extracted Text")
+                                preview_text = st.session_state.raw_text[:500] + "..." if len(st.session_state.raw_text) > 500 else st.session_state.raw_text
+                                st.text_area("Extracted Text Preview", preview_text, height=100)
+                                
+                                split_chunks = split_data_into_chunks(st.session_state.raw_text)
+                                st.session_state.vectors = store_chunks_vectorDB(chunks=split_chunks, embedding=st.session_state.embedding)
+                                st.success('PDF processing complete! 🎉')
+                                
+                                # Show detected pages and word count
+                                word_count = len(st.session_state.raw_text.split())
+                                st.markdown(f"<p class='success'>Extracted {word_count} words from the PDF.</p>", unsafe_allow_html=True)
+                                
+                                # Reset answers when new PDF is processed
+                                if 'answers' in st.session_state:
+                                    del st.session_state.answers
+                                st.session_state.answers_generated = False
+                            else:
+                                st.error("Failed to extract text from the PDF. Please try another file.")
+                        except Exception as e:
+                            st.error(f"Error processing PDF: {str(e)}")
     
     # Main content
+    st.write("Rendering main content...")
+    
     if st.session_state.vectors:
         st.subheader(f"Generate {board} Class {class_level} {subject} Questions")
         
@@ -1053,7 +1140,15 @@ def main():
         6. **Export**: Download both questions and answers as PDF files
         """)
         
-        st.info("This tool supports OCR for scanned PDFs and handwritten content. Enable the OCR option in the sidebar if you're using scanned materials.")
-## run the app
-if __name__ == "__main__":
+        if tesseract_available:
+            st.info("This tool supports OCR for scanned PDFs and handwritten content. Enable the OCR option in the sidebar if you're using scanned materials.")
+        else:
+            st.warning("OCR is not available in this environment. Scanned PDFs may not work properly. Only text-based PDFs are fully supported.")
+
+# Execute the main function - direct call instead of with __name__ check
+st.write("About to call main function...")
+try:
     main()
+    st.write("Main function executed successfully!")
+except Exception as e:
+    st.error(f"Error in main function: {str(e)}")
