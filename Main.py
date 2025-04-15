@@ -1054,6 +1054,6 @@ def main():
         """)
         
         st.info("This tool supports OCR for scanned PDFs and handwritten content. Enable the OCR option in the sidebar if you're using scanned materials.")
-
+## run the app
 if __name__ == "__main__":
     main()
