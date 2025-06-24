@@ -1,3 +1,2 @@
-# packages.txt  ───────────────
-poppler-utils      # for pdf2image  → pdftoppm / pdfinfo
-tesseract-ocr      # for pytesseract (optional but you’re using it)
+poppler-utils      
+tesseract-ocr    
