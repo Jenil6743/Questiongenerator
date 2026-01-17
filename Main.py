@@ -1,7 +1,7 @@
 import streamlit as st
 import os
 import PyPDF2
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
@@ -1032,3 +1032,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
