@@ -1,5 +1,4 @@
 streamlit
-python-dotenv
 fpdf
 pypdf2==3.0.1
 langchain
@@ -12,3 +11,4 @@ pytesseract
 pdf2image
 pillow
 requests
+google-generativeais
