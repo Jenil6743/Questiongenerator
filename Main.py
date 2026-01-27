@@ -612,7 +612,7 @@ def generate_questions(inputs, max_retries=2):
         st.error("GROQ API key is missing. Please check your secrets.")
         return "Error: Missing API key. Contact the administrator."
     
-    llm = ChatGroq(api_key=groq_api_key, model='llama3-8b-8192')
+    llm = ChatGroq(api_key=groq_api_key, model='llama-3.1-70b-versatile')
     
     seed = random.randint(1, 1000)
     
@@ -754,7 +754,7 @@ def generate_answers(questions, board, class_level, subject, question_type):
         st.error("GROQ API key is missing. Please check your secrets.")
         return "Error: Missing API key. Contact the administrator."
     
-    llm = ChatGroq(api_key=groq_api_key, model='llama3-8b-8192')
+    llm = ChatGroq(api_key=groq_api_key, model='llama-3.1-70b-versatile')
     
     answer_prompt = get_answer_prompt(question_type, board, class_level, subject)
     
@@ -836,7 +836,7 @@ def validate_questions(questions, board, class_level, subject):
         st.error("GROQ API key is missing. Please check your secrets.")
         return questions
     
-    llm = ChatGroq(api_key=groq_api_key, model='llama3-8b-8192')
+    llm = ChatGroq(api_key=groq_api_key, model='llama-3.1-70b-versatile')
     validation_prompt = f"""
     You are an expert validator for {board} Class {class_level} {subject} exam questions.
     
@@ -1401,4 +1401,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
