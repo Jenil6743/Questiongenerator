@@ -4,7 +4,7 @@ import PyPDF2
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_google_genai import GoogleGenerativeAIEmbeddings
+from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_groq import ChatGroq
 from fpdf import FPDF
 import re
@@ -55,6 +55,13 @@ def get_api_key(key_name):
     else:
         st.error(f"Missing API key: {key_name}. Please add it to your secrets.")
         return None
+
+@st.cache_resource
+def load_embeddings():
+    """Load HuggingFace embeddings model (cached for performance)"""
+    return HuggingFaceEmbeddings(
+        model_name="sentence-transformers/all-MiniLM-L6-v2"
+    )
 
 def estimate_tokens(text):
     # Simple estimation: ~1.3 tokens per word for English
@@ -169,10 +176,18 @@ def store_chunks_vectorDB(chunks, embedding):
         progress_bar.progress((batch_num + 1) / total_batches)
         status_text.text(f"Processing batch {batch_num + 1} of {total_batches}...")
         
-        if vector_db is None:
-            vector_db = FAISS.from_texts(texts=batch_chunks, embedding=embedding)
-        else:
-            vector_db.add_texts(texts=batch_chunks)
+        try:
+            if vector_db is None:
+                vector_db = FAISS.from_texts(texts=batch_chunks, embedding=embedding)
+            else:
+                vector_db.add_texts(texts=batch_chunks)
+            
+            # Small delay to prevent any potential issues
+            time.sleep(0.1)
+            
+        except Exception as e:
+            st.error(f"Error processing batch {batch_num + 1}: {e}")
+            raise
     
     progress_bar.empty()
     status_text.empty()
@@ -214,7 +229,7 @@ def parse_questions_to_list(content):
     return questions_list
 
 def create_word_doc(content, board, class_level, subject, question_type, is_answer_key=False):
-    """NEW: Create a Word document with the generated content"""
+    """Create a Word document with the generated content"""
     doc = Document()
     
     # Add title
@@ -258,7 +273,7 @@ def create_word_doc(content, board, class_level, subject, question_type, is_answ
     return temp_file.name
 
 def create_excel_file(content, board, class_level, subject, question_type, is_answer_key=False):
-    """NEW: Create an Excel file with questions/answers in structured format"""
+    """Create an Excel file with questions/answers in structured format"""
     questions_list = parse_questions_to_list(content)
     
     # Create DataFrame
@@ -295,7 +310,7 @@ def create_excel_file(content, board, class_level, subject, question_type, is_an
     return temp_file.name
 
 def create_json_export(content, settings):
-    """NEW: Create JSON export with metadata"""
+    """Create JSON export with metadata"""
     questions_list = parse_questions_to_list(content)
     
     # Create JSON structure
@@ -315,7 +330,7 @@ def create_json_export(content, settings):
     return json.dumps(export_data, indent=2, ensure_ascii=False)
 
 def save_to_question_bank(questions, answers, settings):
-    """NEW: Save generated questions to question bank"""
+    """Save generated questions to question bank"""
     if 'question_bank' not in st.session_state:
         st.session_state.question_bank = []
     
@@ -927,11 +942,10 @@ def main():
     """, unsafe_allow_html=True)
     
     groq_api_key = get_api_key("GROQ_API_KEY")
-    google_api_key = get_api_key("GOOGLE_API_KEY")
     
-    if not groq_api_key or not google_api_key:
-        st.warning("API keys are missing. The application may not function correctly.")
-        st.info("For administrators: Please add GROQ_API_KEY and GOOGLE_API_KEY to your Streamlit secrets.")
+    if not groq_api_key:
+        st.warning("GROQ API key is missing. The application may not function correctly.")
+        st.info("For administrators: Please add GROQ_API_KEY to your Streamlit secrets.")
     
     with st.sidebar:
         st.header("Upload PDF and Settings")
@@ -968,7 +982,7 @@ def main():
         st.markdown("### Performance Options")
         use_faster_model = st.checkbox("Use faster model (may reduce quality slightly)", value=True)
         
-        # NEW: Question Bank in sidebar
+        # Question Bank in sidebar
         if st.session_state.question_bank:
             st.markdown("### 📚 Question Bank")
             st.metric("Saved Questions", len(st.session_state.question_bank))
@@ -988,33 +1002,29 @@ def main():
         if upload_pdf:
             if st.button(f'Process {board} PDF', use_container_width=True):
                 with st.spinner('Processing PDF...'):
-                    google_api_key = get_api_key("GOOGLE_API_KEY")
-                    if not google_api_key:
-                        st.error("Google API key is missing. Please check your secrets.")
-                    else:
-                        st.session_state.embedding = GoogleGenerativeAIEmbeddings(
-                            api_key=google_api_key,
-                            model="models/embedding-001"
-                        )
-                        st.session_state.raw_text = get_pdf_text(upload_pdf)
+                    # Load HuggingFace embeddings (no API key needed)
+                    st.info("Using HuggingFace embeddings (no API key required)")
+                    st.session_state.embedding = load_embeddings()
+                    
+                    st.session_state.raw_text = get_pdf_text(upload_pdf)
+                    
+                    if st.session_state.raw_text:
+                        st.markdown("### Preview of Extracted Text")
+                        preview_text = st.session_state.raw_text[:500] + "..." if len(st.session_state.raw_text) > 500 else st.session_state.raw_text
+                        st.text_area("Extracted Text Preview", preview_text, height=100)
                         
-                        if st.session_state.raw_text:
-                            st.markdown("### Preview of Extracted Text")
-                            preview_text = st.session_state.raw_text[:500] + "..." if len(st.session_state.raw_text) > 500 else st.session_state.raw_text
-                            st.text_area("Extracted Text Preview", preview_text, height=100)
-                            
-                            split_chunks = split_data_into_chunks(st.session_state.raw_text)
-                            st.session_state.vectors = store_chunks_vectorDB(chunks=split_chunks, embedding=st.session_state.embedding)
-                            st.success('PDF processing complete! 🎉')
-                            
-                            word_count = len(st.session_state.raw_text.split())
-                            st.markdown(f"<p class='success'>Extracted {word_count} words from the PDF.</p>", unsafe_allow_html=True)
-                            
-                            if 'answers' in st.session_state:
-                                del st.session_state.answers
-                            st.session_state.answers_generated = False
-                        else:
-                            st.error("Failed to extract text from the PDF. Please try another file.")
+                        split_chunks = split_data_into_chunks(st.session_state.raw_text)
+                        st.session_state.vectors = store_chunks_vectorDB(chunks=split_chunks, embedding=st.session_state.embedding)
+                        st.success('PDF processing complete! 🎉')
+                        
+                        word_count = len(st.session_state.raw_text.split())
+                        st.markdown(f"<p class='success'>Extracted {word_count} words from the PDF.</p>", unsafe_allow_html=True)
+                        
+                        if 'answers' in st.session_state:
+                            del st.session_state.answers
+                        st.session_state.answers_generated = False
+                    else:
+                        st.error("Failed to extract text from the PDF. Please try another file.")
     
     if st.session_state.vectors:
         st.subheader(f"Generate {board} Class {class_level} {subject} Questions")
@@ -1076,7 +1086,7 @@ def main():
                 st.subheader("Answer Key")
                 st.markdown(f"<div class='success'>{st.session_state.answers.replace(chr(10), '<br>')}</div>", unsafe_allow_html=True)
     
-    # NEW: Enhanced question editing
+    # Enhanced question editing
     if 'ai_answer' in st.session_state:
         st.markdown("---")
         st.markdown("### ✏️ Edit Questions")
@@ -1099,7 +1109,7 @@ def main():
                 st.rerun()
         
         with col_edit3:
-            # NEW: Save to question bank
+            # Save to question bank
             if st.button("📚 Save to Bank", use_container_width=True):
                 if st.session_state.question_settings:
                     save_to_question_bank(
@@ -1109,7 +1119,7 @@ def main():
                     )
                     st.success(f"Saved! Total in bank: {len(st.session_state.question_bank)}")
     
-    # NEW: Enhanced export options with multiple formats
+    # Enhanced export options with multiple formats
     if "ai_answer" in st.session_state:
         st.markdown("---")
         st.markdown("### 📥 Export Options")
@@ -1386,6 +1396,8 @@ def main():
         """)
         
         st.info("This tool supports OCR for scanned PDFs and handwritten content. Enable the OCR option in the sidebar if you're using scanned materials.")
+        
+        st.success("✨ Now using HuggingFace embeddings - No Google API payment required!")
 
 if __name__ == "__main__":
     main()
