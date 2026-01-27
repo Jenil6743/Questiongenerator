@@ -13,3 +13,6 @@ pdf2image
 Pillow
 requests
 google-generativeai
+python-docx
+openpyxl
+pandas
