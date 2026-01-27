@@ -1397,7 +1397,8 @@ def main():
         
         st.info("This tool supports OCR for scanned PDFs and handwritten content. Enable the OCR option in the sidebar if you're using scanned materials.")
         
-        st.success("✨ Now using HuggingFace embeddings - No Google API payment required!")
+        #st.success("✨ Now using HuggingFace embeddings - No Google API payment required!")
 
 if __name__ == "__main__":
     main()
+
