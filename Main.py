@@ -985,8 +985,6 @@ def main():
         st.info("✅ Using Google Gemini (primary)")
     elif groq_key and not google_key:
         st.info("✅ Using Groq (primary)")
-    else:
-        st.success("✅ Both API keys found! Google Gemini will be used first, with Groq as fallback.")
     
     with st.sidebar:
         st.header("Upload PDF and Settings")
@@ -1435,3 +1433,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
