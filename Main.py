@@ -6,6 +6,7 @@ from langchain_community.vectorstores import FAISS
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_groq import ChatGroq
+from langchain_google_genai import ChatGoogleGenerativeAI
 from fpdf import FPDF
 import re
 import random
@@ -53,8 +54,42 @@ def get_api_key(key_name):
     elif key_name in os.environ:
         return os.environ[key_name]
     else:
-        st.error(f"Missing API key: {key_name}. Please add it to your secrets.")
         return None
+
+def get_llm_with_fallback():
+    """
+    Try Google Gemini first, fallback to Groq if it fails
+    Returns: (llm_instance, model_name) or (None, None) if both fail
+    """
+    # Try Google first
+    google_api_key = get_api_key("GOOGLE_API_KEY")
+    if google_api_key:
+        try:
+            llm = ChatGoogleGenerativeAI(
+                model="gemini-2.0-flash-exp",
+                google_api_key=google_api_key,
+                temperature=0.7
+            )
+            # Test if it works with a simple call
+            return llm, "Google Gemini 2.0 Flash"
+        except Exception as e:
+            st.warning(f"Google Gemini unavailable: {str(e)[:100]}... Switching to Groq.")
+    
+    # Fallback to Groq
+    groq_api_key = get_api_key("GROQ_API_KEY")
+    if groq_api_key:
+        try:
+            llm = ChatGroq(
+                api_key=groq_api_key,
+                model='llama-3.3-70b-versatile'
+            )
+            return llm, "Groq Llama 3.3 70B"
+        except Exception as e:
+            st.error(f"Groq also failed: {str(e)[:100]}")
+    
+    # No API keys available
+    st.error("❌ Neither Google nor Groq API keys found! Please add at least one to your secrets.")
+    return None, None
 
 @st.cache_resource
 def load_embeddings():
@@ -607,12 +642,12 @@ def generate_questions(inputs, max_retries=2):
         "count": num_questions
     }
     
-    groq_api_key = get_api_key("GROQ_API_KEY")
-    if not groq_api_key:
-        st.error("GROQ API key is missing. Please check your secrets.")
-        return "Error: Missing API key. Contact the administrator."
+    # Get LLM with fallback
+    llm, model_name = get_llm_with_fallback()
+    if not llm:
+        return "Error: No API keys available. Please add GOOGLE_API_KEY or GROQ_API_KEY to your secrets."
     
-    llm = ChatGroq(api_key=groq_api_key, model='llama-3.1-405b-reasoning')
+    st.success(f"✅ Using: {model_name}")
     
     seed = random.randint(1, 1000)
     
@@ -749,12 +784,10 @@ def generate_questions(inputs, max_retries=2):
     return "Failed to generate questions after multiple attempts."
 
 def generate_answers(questions, board, class_level, subject, question_type):
-    groq_api_key = get_api_key("GROQ_API_KEY")
-    if not groq_api_key:
-        st.error("GROQ API key is missing. Please check your secrets.")
-        return "Error: Missing API key. Contact the administrator."
-    
-    llm = ChatGroq(api_key=groq_api_key, model='llama-3.1-405b-reasoning')
+    # Get LLM with fallback
+    llm, model_name = get_llm_with_fallback()
+    if not llm:
+        return "Error: No API keys available. Please add GOOGLE_API_KEY or GROQ_API_KEY to your secrets."
     
     answer_prompt = get_answer_prompt(question_type, board, class_level, subject)
     
@@ -831,12 +864,12 @@ def post_process_output(text):
     return text
 
 def validate_questions(questions, board, class_level, subject):
-    groq_api_key = get_api_key("GROQ_API_KEY")
-    if not groq_api_key:
-        st.error("GROQ API key is missing. Please check your secrets.")
+    # Get LLM with fallback
+    llm, model_name = get_llm_with_fallback()
+    if not llm:
+        st.error("No API keys available for validation.")
         return questions
     
-    llm = ChatGroq(api_key=groq_api_key, model='llama-3.1-405b-reasoning')
     validation_prompt = f"""
     You are an expert validator for {board} Class {class_level} {subject} exam questions.
     
@@ -941,11 +974,19 @@ def main():
     </style>
     """, unsafe_allow_html=True)
     
-    groq_api_key = get_api_key("GROQ_API_KEY")
+    # Check API keys
+    google_key = get_api_key("GOOGLE_API_KEY")
+    groq_key = get_api_key("GROQ_API_KEY")
     
-    if not groq_api_key:
-        st.warning("GROQ API key is missing. The application may not function correctly.")
-        st.info("For administrators: Please add GROQ_API_KEY to your Streamlit secrets.")
+    if not google_key and not groq_key:
+        st.error("⚠️ No API keys found! Please add GOOGLE_API_KEY or GROQ_API_KEY to your secrets.")
+        st.info("Get Google API key (free): https://aistudio.google.com/apikey")
+    elif google_key and not groq_key:
+        st.info("✅ Using Google Gemini (primary)")
+    elif groq_key and not google_key:
+        st.info("✅ Using Groq (primary)")
+    else:
+        st.success("✅ Both API keys found! Google Gemini will be used first, with Groq as fallback.")
     
     with st.sidebar:
         st.header("Upload PDF and Settings")
@@ -979,9 +1020,6 @@ def main():
         )
         validate = st.checkbox("Validate generated questions", value=True)
         
-        st.markdown("### Performance Options")
-        use_faster_model = st.checkbox("Use faster model (may reduce quality slightly)", value=True)
-        
         # Question Bank in sidebar
         if st.session_state.question_bank:
             st.markdown("### 📚 Question Bank")
@@ -1002,8 +1040,7 @@ def main():
         if upload_pdf:
             if st.button(f'Process {board} PDF', use_container_width=True):
                 with st.spinner('Processing PDF...'):
-                    # Load HuggingFace embeddings (no API key needed)
-                    st.info("Using HuggingFace embeddings")
+                    st.info("Using HuggingFace all-mpnet-base-v2 embeddings")
                     st.session_state.embedding = load_embeddings()
                     
                     st.session_state.raw_text = get_pdf_text(upload_pdf)
@@ -1109,7 +1146,6 @@ def main():
                 st.rerun()
         
         with col_edit3:
-            # Save to question bank
             if st.button("📚 Save to Bank", use_container_width=True):
                 if st.session_state.question_settings:
                     save_to_question_bank(
@@ -1396,12 +1432,6 @@ def main():
         """)
         
         st.info("This tool supports OCR for scanned PDFs and handwritten content. Enable the OCR option in the sidebar if you're using scanned materials.")
-        
-        #st.success("✨ Now using HuggingFace embeddings - No Google API payment required!")
 
 if __name__ == "__main__":
     main()
-
-
-
-
