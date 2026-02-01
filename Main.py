@@ -60,7 +60,7 @@ def get_api_key(key_name):
 def load_embeddings():
     """Load HuggingFace embeddings model (cached for performance)"""
     return HuggingFaceEmbeddings(
-        model_name="sentence-transformers/all-MiniLM-L6-v2"
+        model_name="sentence-transformers/all-mpnet-base-v2"
     )
 
 def estimate_tokens(text):
@@ -612,7 +612,7 @@ def generate_questions(inputs, max_retries=2):
         st.error("GROQ API key is missing. Please check your secrets.")
         return "Error: Missing API key. Contact the administrator."
     
-    llm = ChatGroq(api_key=groq_api_key, model='llama-3.3-70b-versatile')
+    llm = ChatGroq(api_key=groq_api_key, model='llama-3.1-405b-reasoning')
     
     seed = random.randint(1, 1000)
     
@@ -754,7 +754,7 @@ def generate_answers(questions, board, class_level, subject, question_type):
         st.error("GROQ API key is missing. Please check your secrets.")
         return "Error: Missing API key. Contact the administrator."
     
-    llm = ChatGroq(api_key=groq_api_key, model='llama-3.3-70b-versatile')
+    llm = ChatGroq(api_key=groq_api_key, model='llama-3.1-405b-reasoning')
     
     answer_prompt = get_answer_prompt(question_type, board, class_level, subject)
     
@@ -836,7 +836,7 @@ def validate_questions(questions, board, class_level, subject):
         st.error("GROQ API key is missing. Please check your secrets.")
         return questions
     
-    llm = ChatGroq(api_key=groq_api_key, model='llama-3.3-70b-versatile')
+    llm = ChatGroq(api_key=groq_api_key, model='llama-3.1-405b-reasoning')
     validation_prompt = f"""
     You are an expert validator for {board} Class {class_level} {subject} exam questions.
     
@@ -1401,6 +1401,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
