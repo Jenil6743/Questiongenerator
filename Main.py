@@ -66,12 +66,12 @@ def get_llm_with_fallback():
     if google_api_key:
         try:
             llm = ChatGoogleGenerativeAI(
-                model="gemini-2.0-flash-exp",
+                model="gemini-1.5-flash",
                 google_api_key=google_api_key,
                 temperature=0.7
             )
             # Test if it works with a simple call
-            return llm, "Google Gemini 2.0 Flash"
+            return llm, "Google Gemini 1.5 Flash"
         except Exception as e:
             st.warning(f"Google Gemini unavailable: {str(e)[:100]}... Switching to Groq.")
     
@@ -1433,4 +1433,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
