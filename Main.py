@@ -124,7 +124,8 @@ def get_api_key(key_name):
 def load_embeddings():
     """Load HuggingFace embeddings model (cached for performance)"""
     return HuggingFaceEmbeddings(
-        model_name="sentence-transformers/all-mpnet-base-v2"
+        model_name="BAAI/bge-base-en-v1.5"
+        encode_kwargs={'normalize_embeddings': True}        
     )
 
 
@@ -1661,3 +1662,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
