@@ -1,4 +1,4 @@
-import streamlit as st
+Fimport streamlit as st
 import os
 import PyPDF2
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -965,8 +965,8 @@ def generate_questions(inputs, max_retries=2):
         return "Error: Missing API key. Contact the administrator."
 
     llm = ChatGoogleGenerativeAI(
-    model="gemini-1.5-pro",
-    google_api_key=get_api_key("GOOGLE_API_KEY")
+        model="models/gemini-1.5-pro",  # Added "models/" prefix
+        google_api_key=google_api_key
     )
 
     seed = random.randint(1, 1000)
@@ -1665,6 +1665,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
