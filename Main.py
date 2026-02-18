@@ -960,17 +960,12 @@ def generate_questions(inputs, max_retries=2):
         "education_level": education_level
     }
 
-    google_api_key = get_api_key("GOOGLE_API_KEY")
-    if not google_api_key:
-        st.error("Google API key is missing. Please check your secrets.")
+    groq_api_key = get_api_key("GROQ_API_KEY")
+    if not groq_api_key:
+        st.error("GROQ API key is missing.")
         return "Error: Missing API key."
-
-    llm = ChatGoogleGenerativeAI(
-        model="gemini-pro",  # Recommended
-        google_api_key=google_api_key,
-        client_options=ClientOptions(api_endpoint="generativelanguage.googleapis.com")
-
-    )
+    
+    llm = ChatGroq(api_key=groq_api_key, model='llama-3.3-70b-versatile')
 
     seed = random.randint(1, 1000)
 
@@ -1668,6 +1663,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
