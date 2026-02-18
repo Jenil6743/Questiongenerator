@@ -964,7 +964,10 @@ def generate_questions(inputs, max_retries=2):
         st.error("GROQ API key is missing. Please check your secrets.")
         return "Error: Missing API key. Contact the administrator."
 
-    llm = ChatGroq(api_key=groq_api_key, model='llama-3.3-70b-versatile')
+    llm = ChatGoogleGenerativeAI(
+    model="gemini-1.5-pro",
+    google_api_key=get_api_key("GOOGLE_API_KEY")
+    )
 
     seed = random.randint(1, 1000)
 
@@ -1662,5 +1665,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
