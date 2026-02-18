@@ -966,7 +966,7 @@ def generate_questions(inputs, max_retries=2):
 
     llm = ChatGoogleGenerativeAI(
         model="gemini-1.5-pro-latest",  # Recommended
-        google_api_key=google_api_key
+        google_api_key=google_api_key,
         client_options=ClientOptions(api_endpoint="generativelanguage.googleapis.com")
 
     )
@@ -1667,6 +1667,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
