@@ -4,7 +4,7 @@ PyPDF2==3.0.1
 langchain
 langchain_community
 langchain_core
-langchain_google_genai
+langchain-google-genai
 langchain_groq
 langchain-text-splitters
 faiss-cpu
@@ -17,3 +17,4 @@ python-docx
 openpyxl
 pandas
 sentence-transformers
+
