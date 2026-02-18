@@ -8,6 +8,7 @@ from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_groq import ChatGroq
 from langchain_google_genai import ChatGoogleGenerativeAI
 from fpdf import FPDF
+from google.api_core.client_options import ClientOptions
 import re
 import random
 import time
@@ -965,7 +966,7 @@ def generate_questions(inputs, max_retries=2):
         return "Error: Missing API key."
 
     llm = ChatGoogleGenerativeAI(
-        model="gemini-1.5-pro-latest",  # Recommended
+        model="gemini-pro",  # Recommended
         google_api_key=google_api_key,
         client_options=ClientOptions(api_endpoint="generativelanguage.googleapis.com")
 
@@ -1667,6 +1668,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
