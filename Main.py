@@ -1,4 +1,4 @@
-Fimport streamlit as st
+import streamlit as st
 import os
 import PyPDF2
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -1665,6 +1665,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
