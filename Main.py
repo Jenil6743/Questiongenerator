@@ -963,9 +963,9 @@ def generate_questions(inputs, max_retries=2):
     if not google_api_key:
         st.error("Google API key is missing. Please check your secrets.")
         return "Error: Missing API key."
-
+    
     llm = ChatGoogleGenerativeAI(
-        model="models/gemini-1.5-pro",  # Added "models/" prefix
+        model="gemini-1.5-pro-latest",  # Recommended
         google_api_key=google_api_key
     )
 
@@ -1665,6 +1665,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
