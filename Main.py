@@ -959,10 +959,10 @@ def generate_questions(inputs, max_retries=2):
         "education_level": education_level
     }
 
-    groq_api_key = get_api_key("GROQ_API_KEY")
-    if not groq_api_key:
-        st.error("GROQ API key is missing. Please check your secrets.")
-        return "Error: Missing API key. Contact the administrator."
+    google_api_key = get_api_key("GOOGLE_API_KEY")
+    if not google_api_key:
+        st.error("Google API key is missing. Please check your secrets.")
+        return "Error: Missing API key."
 
     llm = ChatGoogleGenerativeAI(
         model="models/gemini-1.5-pro",  # Added "models/" prefix
@@ -1665,6 +1665,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
