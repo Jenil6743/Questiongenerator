@@ -17,4 +17,6 @@ python-docx
 openpyxl
 pandas
 sentence-transformers
+google-generativeai
+
 
